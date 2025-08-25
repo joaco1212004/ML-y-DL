@@ -80,7 +80,7 @@ class RegresionLineal:
             grad = (2/n) * (self.x.T @ (y_hat - self.y))
             w -= lr * grad
 
-            if i % 200 == 0 or t == epochs:
+            if i % 200 == 0 or i == epochs:
                 loss = np.mean((y_hat - self.y) ** 2)
                 if verbose:
                     print(f"iter {i}, loss(mse): {loss:.4f}")
