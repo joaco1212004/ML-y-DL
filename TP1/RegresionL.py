@@ -32,7 +32,8 @@ class RegresionLineal:
             raise ValueError("Las dimensiones de x e y no coinciden")
         
         if self.feature_names == None:
-            self.feature_names = [f"x{i}" for i in range(self.x.shape[1]) - (1 if bias else 0)]
+            n_features = self.x.shape[1] - (1 if bias else 0)
+            self.feature_names = [f"x{i}" for i in range(n_features)]
         self.colnames_ = (["bias"] if bias else []) + self.feature_names
 
         self.coef = None
@@ -48,10 +49,15 @@ class RegresionLineal:
 
     @staticmethod
     def mse_from_pred(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        y_true = np.asarray(y_true).reshape(-1)
+        y_pred = np.asarray(y_pred).reshape(-1)
         return np.mean((y_true - y_pred) ** 2)
     
     def mse (self, x_test = None, y_test = None):
-        if x_test == None or y_test == None:
+        if self.coef is None:
+            raise RuntimeError("Modelo no entrenado")
+    
+        if x_test is None or y_test is None:
             y_pred = self.x @ self.coef
             y_true = self.y
         else:
@@ -99,6 +105,14 @@ class RegresionLineal:
             raise RuntimeError("El modelo no ha sido entrenado. Llama a fit() antes de predecir.")
         xp = self._prepare_x(newX) 
         return xp @ self.coef
+    
+    @staticmethod
+    def score_from_pred(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        y_true = np.asarray(y_true).reshape(-1)
+        y_pred = np.asarray(y_pred).reshape(-1)
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - y_true.mean()) ** 2)
+        return float(1 - ss_res / ss_tot)
     
     def score (self, x_test = None, y_test = None):
         """R² = 1 - SSE/SST."""
