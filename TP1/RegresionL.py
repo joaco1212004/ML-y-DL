@@ -10,8 +10,10 @@ class RegresionLineal:
     Guarda los pesos en self.coef (incluye intercepto si add_intercept=True).
     """
 
-    def __init__ (self, x, y, bias: bool = True):
+    def __init__(self, x, y, bias: bool = True, l1: float = 0.0, l2: float = 0.0):
         self.feature_names = None
+        self.l1 = l1
+        self.l2 = l2
 
         if isinstance(x, pd.DataFrame):
             self.feature_names = list(x.columns)
@@ -163,3 +165,28 @@ class RegresionLineal:
         range_x = maxx - minx
         range_x[range_x == 0] = 1.0
         return (x - minx) / range_x, minx, range_x
+    
+    @staticmethod
+    def _soft_threshold(z: np.ndarray, t: float) -> np.ndarray:
+        # operador proximal de L1: soft-thresholding
+        return np.sign(z) * np.maximum(np.abs(z) - t, 0.0)
+
+    def fit_ridge(self, l2: float):
+        """Ridge regression (L2 regularization)"""
+        n_features = self.x.shape[1]
+        I = np.eye(n_features)
+        I[0, 0] = 0  # no regularizar el bias
+        self.coef = np.linalg.inv(self.x.T @ self.x + l2 * I) @ (self.x.T @ self.y)
+        return self
+    
+    def fit_lasso(self, l1: float, lr=0.01, epochs=1000):
+        """Lasso regression (L1 regularization) usando GD"""
+        n, m = self.x.shape
+        w = np.zeros(m)
+
+        for _ in range(epochs):
+            grad = (2/n) * self.x.T @ (self.x @ w - self.y) + l1 * np.sign(w)
+            w -= lr * grad
+        
+        self.coef = w
+        return self
