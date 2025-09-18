@@ -1,63 +1,88 @@
 import numpy as np
 
+def _sigmoid(z):
+    # numéricamente estable
+    out = np.empty_like(z, dtype=float)
+    pos = z >= 0
+    neg = ~pos
+    out[pos] = 1.0 / (1.0 + np.exp(-z[pos]))
+    ez = np.exp(z[neg])
+    out[neg] = ez / (1.0 + ez)
+    return out
+
 class LogisticRegressionL2:
-    def __init__(self, lam=0.0, lr=0.1, epochs=5000, tol=1e-6, fit_intercept=True, verbose=False):
+    """
+    Regresión logística binaria con regularización L2 (Ridge).
+    - No regulariza el término de sesgo (bias).
+    """
+    def __init__(self, lam: float = 0.0, lr: float = 0.1, epochs: int = 5000, tol: float = 1e-6,
+                 bias: bool = True, verbose: bool = False):
         self.lam = float(lam)
         self.lr = float(lr)
         self.epochs = int(epochs)
         self.tol = float(tol)
-        self.fit_intercept = bool(fit_intercept)
-        self.verbose = verbose
+        self.bias = bool(bias)
+        self.verbose = bool(verbose)
         self.w = None
 
-    @staticmethod
-    def _sigmoid(z):
-        # numerically stable
-        z = np.clip(z, -40, 40)
-        return 1.0 / (1.0 + np.exp(-z))
-
     def _add_bias(self, X):
-        if not self.fit_intercept: 
+        if not self.bias:
             return X
-        ones = np.ones((X.shape[0], 1), dtype=X.dtype)
-        return np.hstack([ones, X])
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
+        return np.c_[np.ones((X.shape[0], 1)), X]
+
+    def _bce_loss(self, y, p, w):
+        # Binary cross-entropy + L2 (sin bias)
+        eps = 1e-12
+        p = np.clip(p, eps, 1.0 - eps)
+        n = y.shape[0]
+        ce = - (y * np.log(p) + (1 - y) * np.log(1 - p)).mean()
+        if self.bias:
+            w_reg = w[1:]
+        else:
+            w_reg = w
+        reg = 0.5 * self.lam * np.dot(w_reg, w_reg) / n
+        return ce + reg
 
     def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float).reshape(-1)
         Xb = self._add_bias(X)
+
         n, d = Xb.shape
-        self.w = np.zeros(d, dtype=float)
+        w = np.zeros(d, dtype=float)
+        last = np.inf
 
-        prev_loss = np.inf
         for i in range(1, self.epochs + 1):
-            p = self._sigmoid(Xb @ self.w)             # (n,)
-            # grad MSE-logistic = X^T (p - y)/n  +  lam * w  (no regularizar bias)
+            z = Xb @ w
+            p = _sigmoid(z)
+
+            # gradiente de BCE + L2 (sin bias)
             grad = (Xb.T @ (p - y)) / n
-            if self.fit_intercept:
-                grad[0] += 0.0                 # bias sin L2
-                grad[1:] += self.lam * self.w[1:]
-            else:
-                grad += self.lam * self.w
+            if self.lam != 0.0:
+                if self.bias:
+                    grad[1:] += (self.lam / n) * w[1:]
+                else:
+                    grad += (self.lam / n) * w
 
-            self.w -= self.lr * grad
+            w -= self.lr * grad
 
-            # pérdida logística + L2 para early stopping
             if i % 200 == 0 or i == self.epochs:
-                p_safe = np.clip(p, 1e-12, 1 - 1e-12)
-                logloss = -np.mean(y*np.log(p_safe) + (1-y)*np.log(1-p_safe))
-                reg = 0.5 * self.lam * (self.w[1:] @ self.w[1:]) if self.fit_intercept else 0.5 * self.lam * (self.w @ self.w)
-                loss = logloss + reg
+                loss = self._bce_loss(y, p, w)
                 if self.verbose:
-                    print(f"iter {i:5d}  loss={loss:.6f}")
-                if abs(prev_loss - loss) < self.tol:
-                    if self.verbose:
-                        print(f"Converged at iter {i}, loss={loss:.6f}")
+                    print(f"iter {i} | loss {loss:.6f}")
+                if abs(last - loss) < self.tol:
                     break
-                prev_loss = loss
+                last = loss
+
+        self.w = w
         return self
 
     def predict_proba(self, X):
+        X = np.asarray(X, dtype=float)
         Xb = self._add_bias(X)
-        return self._sigmoid(Xb @ self.w)
+        return _sigmoid(Xb @ self.w)
 
-    def predict(self, X, threshold=0.5):
+    def predict(self, X, threshold: float = 0.5):
         return (self.predict_proba(X) >= threshold).astype(int)
