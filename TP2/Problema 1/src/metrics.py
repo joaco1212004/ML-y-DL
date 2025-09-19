@@ -15,6 +15,104 @@ def threshold_labels(y_score, thr: float = 0.5) -> np.ndarray:
     """Convierte puntajes/probabilidades en etiquetas {0,1} con un umbral dado."""
     return (np.asarray(y_score) >= thr).astype(int)
 
+import numpy as np
+
+def undersample_majority(X, y, seed=42):
+    """Baja la clase mayoritaria para empatar con la minoritaria."""
+    rng = np.random.default_rng(seed)
+    idx0 = np.where(y==0)[0]
+    idx1 = np.where(y==1)[0]
+    if len(idx0) == 0 or len(idx1) == 0:
+        return X, y
+    if len(idx0) > len(idx1):
+        keep0 = rng.choice(idx0, size=len(idx1), replace=False)
+        new_idx = np.r_[keep0, idx1]
+    else:
+        keep1 = rng.choice(idx1, size=len(idx0), replace=False)
+        new_idx = np.r_[idx0, keep1]
+    rng.shuffle(new_idx)
+    return X[new_idx], y[new_idx]
+
+def oversample_duplicate(X, y, seed=42):
+    """Duplica aleatoriamente la clase minoritaria hasta igualar a la mayoritaria."""
+    rng = np.random.default_rng(seed)
+    idx0 = np.where(y==0)[0]
+    idx1 = np.where(y==1)[0]
+    n0, n1 = len(idx0), len(idx1)
+    if n0 == 0 or n1 == 0:
+        return X, y
+    if n0 > n1:
+        need = n0 - n1
+        add = rng.choice(idx1, size=need, replace=True)
+        new_idx = np.r_[np.arange(len(y)), add]
+    else:
+        need = n1 - n0
+        add = rng.choice(idx0, size=need, replace=True)
+        new_idx = np.r_[np.arange(len(y)), add]
+    rng.shuffle(new_idx)
+    return X[new_idx], y[new_idx]
+
+def smote_simple(X, y, seed=42):
+    """
+    SMOTE básico (sin sklearn):
+    para cada muestra minoritaria se elige al azar otra minoritaria y se interpola.
+    Genera sintéticos hasta igualar a la mayoritaria.
+    """
+    rng = np.random.default_rng(seed)
+    idx0 = np.where(y==0)[0]
+    idx1 = np.where(y==1)[0]
+    n0, n1 = len(idx0), len(idx1)
+    if n0 == 0 or n1 == 0 or X.shape[0] < 2:
+        return X, y
+
+    # definimos minoritaria/mayoritaria
+    if n0 > n1:
+        min_idx, maj_n = idx1, n0
+    else:
+        min_idx, maj_n = idx0, n1
+
+    gap = maj_n - len(min_idx)
+    if gap <= 0:
+        return X, y
+
+    # sintetizamos 'gap' puntos
+    X_min = X[min_idx]
+    new_samples = []
+    for _ in range(gap):
+        i = rng.integers(0, len(X_min))
+        j = rng.integers(0, len(X_min))
+        while j == i and len(X_min) > 1:
+            j = rng.integers(0, len(X_min))
+        alpha = rng.random()
+        x_new = X_min[i] + alpha * (X_min[j] - X_min[i])
+        new_samples.append(x_new)
+
+    X_syn = np.vstack(new_samples)
+    y_syn = np.full((gap,), y[min_idx[0]])  # etiqueta de la minoritaria
+
+    X_bal = np.vstack([X, X_syn])
+    y_bal = np.concatenate([y, y_syn])
+    idx = rng.permutation(len(y_bal))
+    return X_bal[idx], y_bal[idx]
+
+def eval_and_store(name, model, Xv, yv, thr):
+    results = []
+    pr_curves = []
+    roc_curves = []
+
+    y_score = model.predict_proba(Xv)
+    y_pred  = (y_score >= thr).astype(int)
+    cm, acc, pre, rec, f1 = basic_metrics(yv, y_pred)
+    auc_pr  = auc_pr_np(yv, y_score)
+    auc_roc = auc_roc_np(yv, y_score)
+    results.append([name, acc, pre, rec, f1, auc_roc, auc_pr])
+    rec_curve, prec_curve = pr_curve_np(yv, y_score)
+    fpr_curve, tpr_curve  = roc_curve_np(yv, y_score)
+    pr_curves.append((name, rec_curve, prec_curve))
+    roc_curves.append((name, fpr_curve, tpr_curve))
+
+    return results, pr_curves, roc_curves
+
 # =========================
 # Matriz y métricas básicas
 # =========================
@@ -131,7 +229,7 @@ def plot_pr(y_true, y_score, ax=None, label=None):
     rec, prec = pr_curve_np(y_true, y_score)
     ap = auc_trapezoid(rec, prec)
     if ax is None: ax = plt.gca()
-    ax.plot(rec, prec, lw=2, label=f"{label or 'PR'} (AUC-PR={ap:.3f})")
+    ax.plot(rec, prec, lw=2, label=f"{label or 'PR'} (AUC-PR={ap:.4f})")
     ax.set_xlabel("Recall"); ax.set_ylabel("Precision"); ax.set_title("Precision-Recall")
     ax.grid(True); ax.legend()
     return ap
@@ -141,30 +239,11 @@ def plot_roc(y_true, y_score, ax=None, label=None):
     fpr, tpr = roc_curve_np(y_true, y_score)
     ar = auc_trapezoid(fpr, tpr)
     if ax is None: ax = plt.gca()
-    ax.plot(fpr, tpr, lw=2, label=f"{label or 'ROC'} (AUC={ar:.3f})")
+    ax.plot(fpr, tpr, lw=2, label=f"{label or 'ROC'} (AUC={ar:.4f})")
     ax.plot([0,1],[0,1],'--',color='gray',lw=1)
     ax.set_xlabel("FPR"); ax.set_ylabel("TPR (Recall)"); ax.set_title("ROC")
     ax.grid(True); ax.legend()
     return ar
-
-def plot_roc_pr(y_true, y_score):
-    """Conveniencia: dibuja ambas curvas en figuras separadas y retorna (AUC-ROC, AUC-PR)."""
-    # ROC
-    fpr, tpr = roc_curve_np(y_true, y_score)
-    auc_roc = auc_trapezoid(fpr, tpr)
-    plt.figure(figsize=(4.2, 3.6))
-    plt.plot(fpr, tpr, lw=2)
-    plt.plot([0, 1], [0, 1], "--", color="gray", lw=1)
-    plt.xlabel("FPR"); plt.ylabel("TPR"); plt.title(f"ROC (AUC={auc_roc:.3f})")
-    plt.tight_layout(); plt.show()
-    # PR
-    rec, prec = pr_curve_np(y_true, y_score)
-    auc_pr = auc_trapezoid(rec, prec)
-    plt.figure(figsize=(4.2, 3.6))
-    plt.plot(rec, prec, lw=2)
-    plt.xlabel("Recall"); plt.ylabel("Precision"); plt.title(f"PR (AUC={auc_pr:.3f})")
-    plt.tight_layout(); plt.show()
-    return auc_roc, auc_pr
 
 # =========================
 # Umbral óptimo por F1
@@ -185,11 +264,17 @@ def best_threshold_for_f1(y_true, y_score, grid=None):
             best_f1, best_thr = f1, thr
     return best_thr, best_f1
 
-def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, lr=0.1, epochs=4000, tol=1e-6):
-    best = dict(f1=-1, lam=None, thr=0.5, model=None)
+def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *,
+                sample_weight=None,  # <-- para cost re-weighting (opcional)
+                lr=0.1, epochs=4000, tol=1e-6,
+                bias=True,  # o bias=True según tu clase
+                **fit_kwargs):
+    best = (-1.0, None, 0.5, None)  # f1, lam, thr, model
     for lam in lambdas:
-        m = LogisticRegressionL2(lam=lam, lr=lr, epochs=epochs, tol=tol, fit_intercept=True).fit(X_tr, y_tr)
-        thr, f1 = best_threshold_for_f1(y_va, m.predict_proba(X_va))
-        if f1 > best["f1"]:
-            best.update(f1=f1, lam=lam, thr=thr, model=m)
-    return best["model"], best["lam"], best["thr"], best["f1"]
+        m = LogisticRegressionL2(lam=lam, lr=lr, epochs=epochs, tol=tol, bias=bias, **fit_kwargs).fit(X_tr, y_tr, sample_weight=sample_weight)
+        y_score = m.predict_proba(X_va)
+        thr, f1  = best_threshold_for_f1(y_va, y_score)
+        if f1 > best[0]:
+            best = (f1, lam, thr, m)
+    f1, lam, thr, m = best
+    return m, lam, thr, f1
