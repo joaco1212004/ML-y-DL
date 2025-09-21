@@ -1,7 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-from src.models import LogisticRegressionL2
+import matplotlib.pyplot as plt
+import pandas as pd
+from src.models import *
 
 # =========================
 # Helpers
@@ -93,27 +94,67 @@ def smote_simple(X, y, seed=42):
     idx = rng.permutation(len(y_bal))
     return X_bal[idx], y_bal[idx]
 
-def eval_and_store(name, model, Xv, yv, thr):
-    results = []
-    pr_curves = []
-    roc_curves = []
-
+def eval_and_store_binary(name, model, Xv, yv, thr, results, pr_curves, roc_curves):
     y_score = model.predict_proba(Xv)
     y_pred  = (y_score >= thr).astype(int)
+
     cm, acc, pre, rec, f1 = basic_metrics(yv, y_pred)
     auc_pr  = auc_pr_np(yv, y_score)
     auc_roc = auc_roc_np(yv, y_score)
+
     results.append([name, acc, pre, rec, f1, auc_roc, auc_pr])
+
     rec_curve, prec_curve = pr_curve_np(yv, y_score)
     fpr_curve, tpr_curve  = roc_curve_np(yv, y_score)
     pr_curves.append((name, rec_curve, prec_curve))
     roc_curves.append((name, fpr_curve, tpr_curve))
 
-    return results, pr_curves, roc_curves
+def eval_and_store_multiclass(name, y_true, P, classes, results, pr_curves, roc_curves):
+    y_true  = np.asarray(y_true).reshape(-1)
+    classes = np.asarray(classes)
+    idx_hat = np.argmax(P, axis=1)
+    y_hat   = classes[idx_hat]
+
+    precs, recs, f1s = [], [], []
+    for j, c in enumerate(classes):
+        y_bin     = (y_true == c).astype(int)
+        y_hat_bin = (idx_hat == j).astype(int)
+
+        _, _, pre, rec, f1 = basic_metrics(y_bin, y_hat_bin)
+        precs.append(pre); recs.append(rec); f1s.append(f1)
+
+        rec_curve, prec_curve = pr_curve_np(y_bin, P[:, j])
+        fpr_curve, tpr_curve  = roc_curve_np(y_bin, P[:, j])
+        pr_curves.append((f"{name} (c={c})", rec_curve, prec_curve))
+        roc_curves.append((f"{name} (c={c})", fpr_curve, tpr_curve))
+
+    acc_macro = float((y_hat == y_true).mean())
+    results.append([name,
+                    acc_macro,
+                    float(np.mean(precs)),
+                    float(np.mean(recs)),
+                    float(np.mean(f1s))])
+
 
 # =========================
 # Matriz y métricas básicas
 # =========================
+
+def stratified_split_idx(y, test_size=0.2, seed=42):
+    rng = np.random.default_rng(seed)
+    y = np.asarray(y)
+    idx_tr, idx_va = [], []
+    for cls in np.unique(y):
+        idx = np.where(y == cls)[0]
+        rng.shuffle(idx)
+        cut = int((1 - test_size) * len(idx))
+        idx_tr.append(idx[:cut])
+        idx_va.append(idx[cut:])
+    idx_tr = np.concatenate(idx_tr)
+    idx_va = np.concatenate(idx_va)
+    rng.shuffle(idx_tr); rng.shuffle(idx_va)
+    return idx_tr, idx_va
+
 def confusion_matrix(y_true, y_pred) -> np.ndarray:
     y_true = _as1d(y_true); y_pred = _as1d(y_pred)
     tn = int(((y_true == 0) & (y_pred == 0)).sum())
@@ -243,6 +284,42 @@ def plot_roc(y_true, y_score, ax=None, label=None):
     ax.grid(True); ax.legend()
     return ar
 
+def ovr_eval_table_and_curves(y_true, proba, classes, thr=0.5):
+    """
+    y_true  : array de clases (p.ej. {1,2,3})
+    proba   : matriz (n, K) con score/prob por clase en el mismo orden que 'classes'
+    classes : iterable con las etiquetas de clase (p.ej. np.array([1,2,3]))
+    thr     : umbral para convertir score->label en cada OVA
+    """
+    y_true = _as1d(y_true)
+    classes = np.asarray(classes)
+    rows = []
+    pr_curves = []   # (name, recall, precision)
+    roc_curves = []  # (name, fpr, tpr)
+
+    for k, c in enumerate(classes):
+        y_bin   = (y_true == c).astype(int)
+        y_score = proba[:, k]
+        y_pred  = threshold_labels(y_score, thr)
+
+        # métricas con tus binarios
+        p   = precision(y_bin, y_pred)
+        r   = recall(y_bin, y_pred)
+        f1  = f1_score(y_bin, y_pred)
+
+        fpr, tpr   = roc_curve_np(y_bin, y_score)
+        rec, prec  = pr_curve_np(y_bin, y_score)
+        auc_roc    = auc_trapezoid(fpr, tpr)
+        auc_pr     = auc_trapezoid(rec, prec)
+
+        rows.append([c, p, r, f1, auc_roc, auc_pr])
+        pr_curves.append((f"Clase {c}", rec, prec))
+        roc_curves.append((f"Clase {c}", fpr, tpr))
+
+    import pandas as pd
+    table = pd.DataFrame(rows, columns=["Clase","Precision","Recall","F1","AUC-ROC","AUC-PR"])
+    return table, pr_curves, roc_curves
+
 # =========================
 # Umbral óptimo por F1
 # =========================
@@ -276,3 +353,69 @@ def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *,
             best = (f1, lam, thr, m)
     f1, lam, thr, m = best
     return m, lam, thr, f1
+
+# =========================
+# Me Quede Sin Nombres
+# =========================
+def train_logreg_ova(X_tr, y_tr, X_va, y_va, lambdas,
+                     lr=0.1, epochs=4000, tol=1e-6, bias=True):
+    """
+    Entrena 3 clasificadores binarios (1vsAll) con tu tune_lambda.
+    Devuelve dict: clase -> dict(model, lam, thr, f1)
+    """
+    classes = np.unique(y_tr)
+    ova = {}
+    for c in classes:
+        y_tr_bin = (y_tr == c).astype(int)
+        y_va_bin = (y_va == c).astype(int)
+        m, lam, thr, f1 = tune_lambda(
+            X_tr, y_tr_bin, X_va, y_va_bin, lambdas,
+            lr=lr, epochs=epochs, tol=tol, bias=bias
+        )
+        ova[int(c)] = dict(model=m, lam=lam, thr=thr, f1=f1)
+    return ova
+
+import numpy as np
+
+def predict_proba_ova(ova, X, classes=None):
+    """
+    Acepta:
+      - dict: {clase: clf}  ó {clase: {"model": clf}}
+      - lista/iterable: [(clase, clf), ...]
+    Devuelve:
+      P  -> matriz (n, C) con probas 1-vs-all por clase
+      cls-> np.array de clases en el mismo orden de columnas de P
+    Si se pasa `classes`, reordena las columnas para respetar ese orden.
+    """
+    # Normalizo a lista de pares (clase, clf)
+    if isinstance(ova, dict):
+        items = []
+        for c, v in ova.items():
+            clf = v.get("model", v) if isinstance(v, dict) else v
+            items.append((c, clf))
+    else:
+        items = list(ova)  # asumir [(c, clf), ...]
+
+    # Orden deseado
+    if classes is not None:
+        pos = {c: i for i, (c, _) in enumerate(items)}
+        items = [(c, items[pos[c]][1]) for c in classes]
+        cls = np.asarray(classes)
+    else:
+        items.sort(key=lambda t: t[0])
+        cls = np.asarray([c for c, _ in items])
+
+    # Apilo probabilidades
+    P = np.column_stack([clf.predict_proba(X) for _, clf in items])
+    return P, cls
+
+
+def predict_ova(ova, X):
+    """
+    Predicción de clase = argmax de probas OVA.
+    (Si querés usar umbrales por clase para “rechazo”, lo podés customizar.)
+    """
+    P, classes = predict_proba_ova(ova, X)
+    idx = np.argmax(P, axis=1)
+    y_hat = np.array([classes[i] for i in idx])
+    return y_hat
