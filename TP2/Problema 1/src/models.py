@@ -21,6 +21,7 @@ class LogisticRegressionL2:
         # CAST EXPLÍCITO A FLOAT PARA EVITAR dtype=object
         X = np.asarray(X, dtype=float)
         z = X @ self.w + (self.b if self.bias else 0.0)
+        
         return self._sigmoid(z)
 
     def predict(self, X, threshold=0.5):
@@ -40,7 +41,7 @@ class LogisticRegressionL2:
             sw = np.asarray(sample_weight, dtype=np.float64).reshape(-1)
 
         sw_sum = float(sw.sum()) if sw.size else 1.0
-        
+
         if sw_sum <= 0:
             sw = np.ones(n, dtype=np.float64)
             sw_sum = float(n)

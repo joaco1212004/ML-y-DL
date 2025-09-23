@@ -20,6 +20,7 @@ class LDA:
         priors = []
         # covarianza “pooled”
         S = np.zeros((d, d), float)
+
         for c in self.classes_:
             Xc = X[y == c]
             priors.append(len(Xc) / n)
@@ -31,8 +32,9 @@ class LDA:
         S /= (n - K)
         S += self.reg * np.eye(d)
         self.cov_inv_ = np.linalg.inv(S)
-        self.means_ = np.vstack(means)          # (K, d)
-        self.priors_ = np.asarray(priors)       # (K,)
+        self.means_ = np.vstack(means)  # (K, d)
+        self.priors_ = np.asarray(priors)   # (K,)
+        
         return self
 
     def _discriminant(self, X):
@@ -41,6 +43,7 @@ class LDA:
         A = self.cov_inv_ @ self.means_.T   # (d,K)
         first = X @ A   # (n,K)
         second = 0.5 * np.sum(self.means_ @ self.cov_inv_ * self.means_, axis=1)  # (K,)
+
         return first - second + np.log(self.priors_)
 
     def predict_proba(self, X):
@@ -48,10 +51,12 @@ class LDA:
         g -= g.max(axis=1, keepdims=True)  # estabilidad
         p = np.exp(g)
         p /= p.sum(axis=1, keepdims=True)
+
         return p
 
     def predict(self, X):
         idx = np.argmax(self._discriminant(X), axis=1)
+
         return self.classes_[idx]
 
 class SoftmaxRegression:
@@ -72,14 +77,17 @@ class SoftmaxRegression:
         Z = Z - Z.max(axis=1, keepdims=True)
         P = np.exp(Z)
         P /= P.sum(axis=1, keepdims=True)
+
         return P
 
     def predict_proba(self, X):
         Z = X @ self.W + (self.b if self.bias else 0.0)
+
         return self._softmax(Z)
 
     def predict(self, X):
         idx = np.argmax(self.predict_proba(X), axis=1)
+
         return self.classes_[idx]
 
     def fit(self, X, y):
@@ -115,6 +123,7 @@ class SoftmaxRegression:
                     print(f"converged @ {it}, loss = {loss:.6f}")
                 break
             prev_loss = loss
+
         return self
 
 def _entropy(counts):
@@ -122,6 +131,7 @@ def _entropy(counts):
     if tot <= 0: return 0.0
     p = counts / tot
     p = p[p > 0]
+
     return float(-(p * np.log2(p)).sum())
 
 class _TreeNode:
@@ -217,7 +227,7 @@ class DecisionTreeEntropy:
         node.feat = best_feat
         node.thr = best_thr
         mask = X[:, best_feat] <= best_thr
-        node.left  = self._grow(X[mask],  y[mask],  depth+1)
+        node.left = self._grow(X[mask], y[mask], depth+1)
         node.right = self._grow(X[~mask], y[~mask], depth+1)
 
         return node
@@ -230,6 +240,7 @@ class DecisionTreeEntropy:
         y_map = {c:i for i,c in enumerate(self.classes_)}
         yi = np.array([y_map[yy] for yy in y], int)
         self.root = self._grow(X, yi, depth=0)
+
         return self
 
     def _proba_one(self, x, node):
@@ -243,10 +254,12 @@ class DecisionTreeEntropy:
     def predict_proba(self, X):
         X = np.asarray(X, float)
         P = np.vstack([self._proba_one(x, self.root) for x in X])
+
         return P
 
     def predict(self, X):
         idx = np.argmax(self.predict_proba(X), axis=1)
+
         return self.classes_[idx]
 
 
@@ -281,10 +294,12 @@ class RandomForest:
     def predict_proba(self, X):
         Ps = [t.predict_proba(X) for t in self.trees]   # lista (n,K)
         P = np.mean(Ps, axis=0)
+
         return P
 
     def predict(self, X):
         idx = np.argmax(self.predict_proba(X), axis=1)
+
         return self.classes_[idx]
 
 class LogisticRegressionL2:

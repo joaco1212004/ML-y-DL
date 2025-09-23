@@ -10,6 +10,7 @@ from src.models import *
 def _as1d(a) -> np.ndarray:
     """Asegura vector 1D para comparaciones y acumulados."""
     a = np.asarray(a)
+    
     return a.reshape(-1)
 
 def threshold_labels(y_score, thr: float = 0.5) -> np.ndarray:
@@ -32,6 +33,7 @@ def undersample_majority(X, y, seed=42):
         new_idx = np.r_[idx0, keep1]
 
     rng.shuffle(new_idx)
+
     return X[new_idx], y[new_idx]
 
 def oversample_duplicate(X, y, seed=42):
@@ -53,6 +55,7 @@ def oversample_duplicate(X, y, seed=42):
         new_idx = np.r_[np.arange(len(y)), add]
 
     rng.shuffle(new_idx)
+
     return X[new_idx], y[new_idx]
 
 def smote_simple(X, y, seed=42):
@@ -187,21 +190,25 @@ def confusion_matrix(y_true, y_pred) -> np.ndarray:
 
 def accuracy(y_true, y_pred) -> float:
     cm = confusion_matrix(y_true, y_pred)
+
     return float((cm[0,0] + cm[1,1]) / cm.sum())
 
 def precision(y_true, y_pred) -> float:
     cm = confusion_matrix(y_true, y_pred)
     tp, fp = cm[1,1], cm[0,1]
+
     return float(tp / (tp + fp)) if (tp + fp) else 0.0
 
 def recall(y_true, y_pred) -> float:
     cm = confusion_matrix(y_true, y_pred)
     tp, fn = cm[1,1], cm[1,0]
+
     return float(tp / (tp + fn)) if (tp + fn) else 0.0
 
 def f1_score(y_true, y_pred) -> float:
     p = precision(y_true, y_pred)
     r = recall(y_true, y_pred)
+
     return float(2 * p * r / (p + r)) if (p + r) else 0.0
 
 def basic_metrics(y_true, y_pred):
@@ -265,14 +272,17 @@ def auc_trapezoid(x, y) -> float:
     """Área bajo la curva por la regla del trapecio."""
     x = _as1d(x); y = _as1d(y)
     idx = np.argsort(x)
+
     return float(np.trapz(y[idx], x[idx]))
 
 def auc_roc_np(y_true, y_score) -> float:
     fpr, tpr = roc_curve_np(y_true, y_score)
+
     return auc_trapezoid(fpr, tpr)
 
 def auc_pr_np(y_true, y_score) -> float:
     rec, prec = pr_curve_np(y_true, y_score)
+
     return auc_trapezoid(rec, prec)
 
 # =========================
@@ -326,19 +336,19 @@ def ovr_eval_table_and_curves(y_true, proba, classes, thr=0.5):
     roc_curves = []  # (name, fpr, tpr)
 
     for k, c in enumerate(classes):
-        y_bin   = (y_true == c).astype(int)
+        y_bin = (y_true == c).astype(int)
         y_score = proba[:, k]
-        y_pred  = threshold_labels(y_score, thr)
+        y_pred = threshold_labels(y_score, thr)
 
         # métricas con binarios
-        p   = precision(y_bin, y_pred)
-        r   = recall(y_bin, y_pred)
-        f1  = f1_score(y_bin, y_pred)
+        p = precision(y_bin, y_pred)
+        r = recall(y_bin, y_pred)
+        f1 = f1_score(y_bin, y_pred)
 
-        fpr, tpr   = roc_curve_np(y_bin, y_score)
-        rec, prec  = pr_curve_np(y_bin, y_score)
-        auc_roc    = auc_trapezoid(fpr, tpr)
-        auc_pr     = auc_trapezoid(rec, prec)
+        fpr, tpr = roc_curve_np(y_bin, y_score)
+        rec, prec = pr_curve_np(y_bin, y_score)
+        auc_roc = auc_trapezoid(fpr, tpr)
+        auc_pr = auc_trapezoid(rec, prec)
 
         rows.append([c, p, r, f1, auc_roc, auc_pr])
         pr_curves.append((f"Clase {c}", rec, prec))
@@ -350,8 +360,8 @@ def ovr_eval_table_and_curves(y_true, proba, classes, thr=0.5):
 
 def plot_confusion_multiclass(name, P, y_true, classes):
     y_hat = classes[np.argmax(P, axis=1)]
-    cm    = pd.crosstab(y_true, y_hat, rownames=['True'], colnames=['Pred'], dropna=False)
-    plt.figure(figsize=(4.2,3.6))
+    cm = pd.crosstab(y_true, y_hat, rownames=['True'], colnames=['Pred'], dropna=False)
+    plt.figure(figsize=(4.2, 3.6))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
     plt.title(f"Matriz de confusión (Test) – {name}")
     plt.tight_layout(); plt.show()
@@ -440,6 +450,7 @@ def predict_proba_ova(ova, X, classes=None):
         cls = np.asarray([c for c, _ in items])
 
     P = np.column_stack([clf.predict_proba(X) for _, clf in items])
+
     return P, cls
 
 

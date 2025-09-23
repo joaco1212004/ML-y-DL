@@ -31,7 +31,7 @@ def to_nan_out_of_range(df: pd.DataFrame, ranges=RANGES) -> pd.DataFrame:
             s = pd.to_numeric(df[c], errors="coerce")
             s[(s < lo) | (s > hi)] = np.nan
             df[c] = s
-            
+
     return df
 
 def split_train_val(df: pd.DataFrame, test_size: float = 0.2, seed: int = 42, stratify: bool = True):
@@ -102,6 +102,6 @@ def preprocess_train_val(df: pd.DataFrame, test_size: float = 0.2, seed: int = 4
     train_df, val_df = df.iloc[train_idx].copy(), df.iloc[val_idx].copy()
     params = fit_preprocessor(train_df)
     X_train, y_train = transform(train_df, params)
-    X_val,   y_val   = transform(val_df,   params)
+    X_val, y_val = transform(val_df, params)
 
     return X_train.to_numpy(), y_train, X_val.to_numpy(), y_val, params

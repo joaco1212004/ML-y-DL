@@ -9,6 +9,7 @@ from src.models import LogisticRegressionL2
 def _as1d(a) -> np.ndarray:
     """Asegura vector 1D para comparaciones y acumulados."""
     a = np.asarray(a)
+    
     return a.reshape(-1)
 
 def threshold_labels(y_score, thr: float = 0.5) -> np.ndarray:
@@ -149,11 +150,13 @@ def precision(y_true, y_pred) -> float:
 def recall(y_true, y_pred) -> float:
     cm = confusion_matrix(y_true, y_pred)
     tp, fn = cm[1,1], cm[1,0]
+
     return float(tp / (tp + fn)) if (tp + fn) else 0.0
 
 def f1_score(y_true, y_pred) -> float:
     p = precision(y_true, y_pred)
     r = recall(y_true, y_pred)
+
     return float(2 * p * r / (p + r)) if (p + r) else 0.0
 
 def basic_metrics(y_true, y_pred):
@@ -210,6 +213,7 @@ def pr_curve_np(y_true, y_score):
     pos_rate = P / len(y_true)
     recall = np.r_[0.0, recall]
     precision = np.r_[pos_rate, precision]
+
     return recall, precision
 
 def auc_trapezoid(x, y) -> float:
@@ -299,4 +303,5 @@ def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *, sample_weight=None, lr=0.1, 
             best = (f1, lam, thr, m)
 
     f1, lam, thr, m = best
+
     return m, lam, thr, f1
