@@ -34,7 +34,7 @@ class LDA:
         self.cov_inv_ = np.linalg.inv(S)
         self.means_ = np.vstack(means)  # (K, d)
         self.priors_ = np.asarray(priors)   # (K,)
-        
+
         return self
 
     def _discriminant(self, X):
@@ -163,6 +163,7 @@ class DecisionTreeEntropy:
         # candidatos de umbral: puntos medios donde cambia la clase
         dif = np.diff(y_sorted)
         idx_cuts = np.where(dif != 0)[0]
+        
         if len(idx_cuts) == 0:
             return -1.0, None
 
@@ -180,11 +181,13 @@ class DecisionTreeEntropy:
 
             nL = i + 1
             nR = len(y_sorted) - nL
+
             if nL < self.min_samples_split or nR < self.min_samples_split:
                 continue
 
             H = (nL * _entropy(left_counts) + nR * _entropy(right_counts)) / (nL + nR)
             gain = parent_H - H
+
             if gain > best_gain:
                 best_gain = gain
                 best_thr = 0.5 * (x_sorted[i] + x_sorted[i+1])
@@ -202,6 +205,7 @@ class DecisionTreeEntropy:
 
         # elegir subconjunto de features
         d = X.shape[1]
+
         if self.max_features is None:
             m = d
         elif self.max_features == 'sqrt':
@@ -210,6 +214,7 @@ class DecisionTreeEntropy:
             m = min(d, self.max_features)
         else:
             m = d
+
         feats = self.rng.choice(d, size=m, replace=False)
 
         # buscar mejor split en ese subconjunto
