@@ -20,7 +20,7 @@ def undersample_majority(X, y, seed=42):
     rng = np.random.default_rng(seed)
     idx0 = np.where(y==0)[0]
     idx1 = np.where(y==1)[0]
-    
+
     if len(idx0) == 0 or len(idx1) == 0:
         return X, y
     
@@ -293,7 +293,7 @@ def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *, sample_weight=None, lr=0.1, 
     for lam in lambdas:
         m = LogisticRegressionL2(lam=lam, lr=lr, epochs=epochs, tol=tol, bias=bias, **fit_kwargs).fit(X_tr, y_tr, sample_weight=sample_weight)
         y_score = m.predict_proba(X_va)
-        thr, f1  = best_threshold_for_f1(y_va, y_score)
+        thr, f1 = best_threshold_for_f1(y_va, y_score)
 
         if f1 > best[0]:
             best = (f1, lam, thr, m)
