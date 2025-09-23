@@ -122,6 +122,7 @@ class SoftmaxRegression:
                 if self.verbose:
                     print(f"converged @ {it}, loss = {loss:.6f}")
                 break
+            
             prev_loss = loss
 
         return self
@@ -163,7 +164,7 @@ class DecisionTreeEntropy:
         # candidatos de umbral: puntos medios donde cambia la clase
         dif = np.diff(y_sorted)
         idx_cuts = np.where(dif != 0)[0]
-        
+
         if len(idx_cuts) == 0:
             return -1.0, None
 
@@ -221,6 +222,7 @@ class DecisionTreeEntropy:
         best_gain, best_feat, best_thr = -1.0, None, None
         for f in feats:
             gain, thr = self._best_split(X, y, f)
+
             if gain > best_gain:
                 best_gain, best_feat, best_thr = gain, f, thr
 
@@ -284,12 +286,14 @@ class RandomForest:
         n = len(y)
         self.classes_ = np.unique(y)
         self.trees = []
+
         for i in range(self.n_estimators):
             if self.bootstrap:
                 idx = self.rng.integers(0, n, size=n)
                 Xi, yi = X[idx], y[idx]
             else:
                 Xi, yi = X, y
+
             t = DecisionTreeEntropy(max_depth=self.max_depth, min_samples_split=self.min_samples_split, max_features=self.max_features, random_state=int(self.rng.integers(0, 1e9)))
             t.fit(Xi, yi)
             self.trees.append(t)
@@ -322,12 +326,14 @@ class LogisticRegressionL2:
     def _sigmoid(z):
         # Evita overflow en exp()
         z = np.clip(z, -35.0, 35.0)
+
         return 1.0 / (1.0 + np.exp(-z))
 
     def predict_proba(self, X):
         # CAST EXPLÍCITO A FLOAT PARA EVITAR dtype=object
         X = np.asarray(X, dtype=float)
         z = X @ self.w + (self.b if self.bias else 0.0)
+
         return self._sigmoid(z)
 
     def predict(self, X, threshold=0.5):
@@ -347,6 +353,7 @@ class LogisticRegressionL2:
             sw = np.asarray(sample_weight, dtype=np.float64).reshape(-1)
 
         sw_sum = float(sw.sum()) if sw.size else 1.0
+
         if sw_sum <= 0:
             sw = np.ones(n, dtype=np.float64)
             sw_sum = float(n)
@@ -373,6 +380,7 @@ class LogisticRegressionL2:
                 reg = 0.5 * self.lam * np.dot(self.w, self.w)
                 loss = float(logloss + reg)
                 backoff += 1
+
             if not np.isfinite(loss):
                 self.w[:] = 0.0
                 self.b = 0.0
@@ -405,6 +413,7 @@ class LogisticRegressionL2:
                 if self.verbose:
                     print(f"converged @ iter {it}, loss={loss:.6f}")
                 break
+
             prev_loss = loss
 
         return self
