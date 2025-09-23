@@ -21,6 +21,7 @@ def undersample_majority(X, y, seed=42):
     rng = np.random.default_rng(seed)
     idx0 = np.where(y==0)[0]
     idx1 = np.where(y==1)[0]
+
     if len(idx0) == 0 or len(idx1) == 0:
         return X, y
     if len(idx0) > len(idx1):
@@ -29,6 +30,7 @@ def undersample_majority(X, y, seed=42):
     else:
         keep1 = rng.choice(idx1, size=len(idx0), replace=False)
         new_idx = np.r_[idx0, keep1]
+
     rng.shuffle(new_idx)
     return X[new_idx], y[new_idx]
 
@@ -38,6 +40,7 @@ def oversample_duplicate(X, y, seed=42):
     idx0 = np.where(y==0)[0]
     idx1 = np.where(y==1)[0]
     n0, n1 = len(idx0), len(idx1)
+
     if n0 == 0 or n1 == 0:
         return X, y
     if n0 > n1:
@@ -48,6 +51,7 @@ def oversample_duplicate(X, y, seed=42):
         need = n1 - n0
         add = rng.choice(idx0, size=need, replace=True)
         new_idx = np.r_[np.arange(len(y)), add]
+
     rng.shuffle(new_idx)
     return X[new_idx], y[new_idx]
 
@@ -61,10 +65,10 @@ def smote_simple(X, y, seed=42):
     idx0 = np.where(y==0)[0]
     idx1 = np.where(y==1)[0]
     n0, n1 = len(idx0), len(idx1)
+
     if n0 == 0 or n1 == 0 or X.shape[0] < 2:
         return X, y
 
-    # definimos minoritaria/mayoritaria
     if n0 > n1:
         min_idx, maj_n = idx1, n0
     else:
@@ -77,6 +81,7 @@ def smote_simple(X, y, seed=42):
     # sintetizamos 'gap' puntos
     X_min = X[min_idx]
     new_samples = []
+
     for _ in range(gap):
         i = rng.integers(0, len(X_min))
         j = rng.integers(0, len(X_min))
@@ -92,6 +97,7 @@ def smote_simple(X, y, seed=42):
     X_bal = np.vstack([X, X_syn])
     y_bal = np.concatenate([y, y_syn])
     idx = rng.permutation(len(y_bal))
+
     return X_bal[idx], y_bal[idx]
 
 def eval_and_store_binary(name, model, Xv, yv, thr, results, pr_curves, roc_curves):
@@ -116,6 +122,7 @@ def eval_and_store_multiclass(name, y_true, P, classes, results, pr_curves, roc_
     y_hat   = classes[idx_hat]
 
     precs, recs, f1s = [], [], []
+
     for j, c in enumerate(classes):
         y_bin     = (y_true == c).astype(int)
         y_hat_bin = (idx_hat == j).astype(int)
@@ -129,12 +136,23 @@ def eval_and_store_multiclass(name, y_true, P, classes, results, pr_curves, roc_
         roc_curves.append((f"{name} (c={c})", fpr_curve, tpr_curve))
 
     acc_macro = float((y_hat == y_true).mean())
-    results.append([name,
-                    acc_macro,
-                    float(np.mean(precs)),
-                    float(np.mean(recs)),
-                    float(np.mean(f1s))])
+    results.append([name, acc_macro, float(np.mean(precs)), float(np.mean(recs)), float(np.mean(f1s))])
 
+def eval_multiclass_table(name, P, y_true, classes):
+    rows = []
+
+    for i, c in enumerate(classes):
+        y_bin   = (y_true == c).astype(int)
+        scores  = P[:, i]
+        # umbral neutro 1/C
+        thr     = 1.0 / len(classes)
+        y_pred  = (scores >= thr).astype(int)
+        cm, acc, pre, rec, f1 = basic_metrics(y_bin, y_pred)
+        auc_roc = auc_roc_np(y_bin, scores)
+        auc_pr  = auc_pr_np(y_bin, scores)
+        rows.append([name, int(c), acc, pre, rec, f1, auc_roc, auc_pr])
+        
+    return rows
 
 # =========================
 # Matriz y métricas básicas
@@ -144,15 +162,18 @@ def stratified_split_idx(y, test_size=0.2, seed=42):
     rng = np.random.default_rng(seed)
     y = np.asarray(y)
     idx_tr, idx_va = [], []
+
     for cls in np.unique(y):
         idx = np.where(y == cls)[0]
         rng.shuffle(idx)
         cut = int((1 - test_size) * len(idx))
         idx_tr.append(idx[:cut])
         idx_va.append(idx[cut:])
+
     idx_tr = np.concatenate(idx_tr)
     idx_va = np.concatenate(idx_va)
     rng.shuffle(idx_tr); rng.shuffle(idx_va)
+
     return idx_tr, idx_va
 
 def confusion_matrix(y_true, y_pred) -> np.ndarray:
@@ -161,8 +182,8 @@ def confusion_matrix(y_true, y_pred) -> np.ndarray:
     fp = int(((y_true == 0) & (y_pred == 1)).sum())
     fn = int(((y_true == 1) & (y_pred == 0)).sum())
     tp = int(((y_true == 1) & (y_pred == 1)).sum())
-    return np.array([[tn, fp],
-                     [fn, tp]], dtype=int)
+
+    return np.array([[tn, fp], [fn, tp]], dtype=int)
 
 def accuracy(y_true, y_pred) -> float:
     cm = confusion_matrix(y_true, y_pred)
@@ -190,6 +211,7 @@ def basic_metrics(y_true, y_pred):
     prec = precision(y_true, y_pred)
     rec  = recall(y_true, y_pred)
     f1   = f1_score(y_true, y_pred)
+
     return cm, acc, prec, rec, f1
 
 # =========================
@@ -214,6 +236,7 @@ def roc_curve_np(y_true, y_score):
     # extremos (0,0) y (1,1)
     FPR = np.r_[0.0, FPR, 1.0]
     TPR = np.r_[0.0, TPR, 1.0]
+
     return FPR, TPR
 
 def pr_curve_np(y_true, y_score):
@@ -231,10 +254,11 @@ def pr_curve_np(y_true, y_score):
     recall = tps / (P + 1e-12)
     precision = tps / (tps + fps + 1e-12)
 
-    # punto inicial: recall=0, precision=tasa de positivos
+    # punto inicial: recall = 0, precision = tasa de positivos
     pos_rate = P / len(y_true)
     recall = np.r_[0.0, recall]
     precision = np.r_[pos_rate, precision]
+
     return recall, precision
 
 def auc_trapezoid(x, y) -> float:
@@ -256,9 +280,7 @@ def auc_pr_np(y_true, y_score) -> float:
 # =========================
 def plot_confusion(cm, title="Matriz de confusión"):
     plt.figure(figsize=(4, 3))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
-                xticklabels=["Pred 0", "Pred 1"],
-                yticklabels=["True 0", "True 1"])
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False, xticklabels=["Pred 0", "Pred 1"], yticklabels=["True 0", "True 1"])
     plt.title(title)
     plt.tight_layout()
     plt.show()
@@ -267,21 +289,27 @@ def plot_pr(y_true, y_score, ax=None, label=None):
     """Traza PR y devuelve AUC-PR."""
     rec, prec = pr_curve_np(y_true, y_score)
     ap = auc_trapezoid(rec, prec)
+
     if ax is None: ax = plt.gca()
+
     ax.plot(rec, prec, lw=2, label=f"{label or 'PR'} (AUC-PR={ap:.4f})")
     ax.set_xlabel("Recall"); ax.set_ylabel("Precision"); ax.set_title("Precision-Recall")
     ax.grid(True); ax.legend()
+
     return ap
 
 def plot_roc(y_true, y_score, ax=None, label=None):
     """Traza ROC y devuelve AUC-ROC."""
     fpr, tpr = roc_curve_np(y_true, y_score)
     ar = auc_trapezoid(fpr, tpr)
+
     if ax is None: ax = plt.gca()
+
     ax.plot(fpr, tpr, lw=2, label=f"{label or 'ROC'} (AUC={ar:.4f})")
     ax.plot([0,1],[0,1],'--',color='gray',lw=1)
     ax.set_xlabel("FPR"); ax.set_ylabel("TPR (Recall)"); ax.set_title("ROC")
     ax.grid(True); ax.legend()
+
     return ar
 
 def ovr_eval_table_and_curves(y_true, proba, classes, thr=0.5):
@@ -302,7 +330,7 @@ def ovr_eval_table_and_curves(y_true, proba, classes, thr=0.5):
         y_score = proba[:, k]
         y_pred  = threshold_labels(y_score, thr)
 
-        # métricas con tus binarios
+        # métricas con binarios
         p   = precision(y_bin, y_pred)
         r   = recall(y_bin, y_pred)
         f1  = f1_score(y_bin, y_pred)
@@ -316,9 +344,17 @@ def ovr_eval_table_and_curves(y_true, proba, classes, thr=0.5):
         pr_curves.append((f"Clase {c}", rec, prec))
         roc_curves.append((f"Clase {c}", fpr, tpr))
 
-    import pandas as pd
     table = pd.DataFrame(rows, columns=["Clase","Precision","Recall","F1","AUC-ROC","AUC-PR"])
+
     return table, pr_curves, roc_curves
+
+def plot_confusion_multiclass(name, P, y_true, classes):
+    y_hat = classes[np.argmax(P, axis=1)]
+    cm    = pd.crosstab(y_true, y_hat, rownames=['True'], colnames=['Pred'], dropna=False)
+    plt.figure(figsize=(4.2,3.6))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+    plt.title(f"Matriz de confusión (Test) – {name}")
+    plt.tight_layout(); plt.show()
 
 # =========================
 # Umbral óptimo por F1
@@ -329,22 +365,23 @@ def best_threshold_for_f1(y_true, y_score, grid=None):
     Devuelve (umbral, f1_max).
     """
     y_true = _as1d(y_true); y_score = _as1d(y_score)
+
     if grid is None:
         grid = np.linspace(0.05, 0.95, 91)
+
     best_f1, best_thr = -1.0, 0.5
+
     for thr in grid:
         y_pred = threshold_labels(y_score, thr)
         f1 = f1_score(y_true, y_pred)
         if f1 > best_f1:
             best_f1, best_thr = f1, thr
+            
     return best_thr, best_f1
 
-def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *,
-                sample_weight=None,  # <-- para cost re-weighting (opcional)
-                lr=0.1, epochs=4000, tol=1e-6,
-                bias=True,  # o bias=True según tu clase
-                **fit_kwargs):
+def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *, sample_weight=None, lr=0.1, epochs=4000, tol=1e-6, bias=True, **fit_kwargs):
     best = (-1.0, None, 0.5, None)  # f1, lam, thr, model
+
     for lam in lambdas:
         m = LogisticRegressionL2(lam=lam, lr=lr, epochs=epochs, tol=tol, bias=bias, **fit_kwargs).fit(X_tr, y_tr, sample_weight=sample_weight)
         y_score = m.predict_proba(X_va)
@@ -352,30 +389,27 @@ def tune_lambda(X_tr, y_tr, X_va, y_va, lambdas, *,
         if f1 > best[0]:
             best = (f1, lam, thr, m)
     f1, lam, thr, m = best
+
     return m, lam, thr, f1
 
-# =========================
-# Me Quede Sin Nombres
-# =========================
-def train_logreg_ova(X_tr, y_tr, X_va, y_va, lambdas,
-                     lr=0.1, epochs=4000, tol=1e-6, bias=True):
+# ====================================
+# Me Quede Sin Nombres (Auxiliares?)
+# ====================================
+def train_logreg_ova(X_tr, y_tr, X_va, y_va, lambdas, lr=0.1, epochs=4000, tol=1e-6, bias=True):
     """
     Entrena 3 clasificadores binarios (1vsAll) con tu tune_lambda.
     Devuelve dict: clase -> dict(model, lam, thr, f1)
     """
     classes = np.unique(y_tr)
     ova = {}
+
     for c in classes:
         y_tr_bin = (y_tr == c).astype(int)
         y_va_bin = (y_va == c).astype(int)
-        m, lam, thr, f1 = tune_lambda(
-            X_tr, y_tr_bin, X_va, y_va_bin, lambdas,
-            lr=lr, epochs=epochs, tol=tol, bias=bias
-        )
+        m, lam, thr, f1 = tune_lambda(X_tr, y_tr_bin, X_va, y_va_bin, lambdas, lr=lr, epochs=epochs, tol=tol, bias=bias)
         ova[int(c)] = dict(model=m, lam=lam, thr=thr, f1=f1)
-    return ova
 
-import numpy as np
+    return ova
 
 def predict_proba_ova(ova, X, classes=None):
     """
@@ -405,7 +439,6 @@ def predict_proba_ova(ova, X, classes=None):
         items.sort(key=lambda t: t[0])
         cls = np.asarray([c for c, _ in items])
 
-    # Apilo probabilidades
     P = np.column_stack([clf.predict_proba(X) for _, clf in items])
     return P, cls
 
@@ -418,4 +451,5 @@ def predict_ova(ova, X):
     P, classes = predict_proba_ova(ova, X)
     idx = np.argmax(P, axis=1)
     y_hat = np.array([classes[i] for i in idx])
+    
     return y_hat

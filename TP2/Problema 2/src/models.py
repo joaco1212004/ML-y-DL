@@ -38,8 +38,8 @@ class LDA:
     def _discriminant(self, X):
         # δ_k(x) = x^T Σ^{-1} μ_k - 0.5 μ_k^T Σ^{-1} μ_k + log π_k
         X = np.asarray(X, float)
-        A = self.cov_inv_ @ self.means_.T                    # (d,K)
-        first = X @ A                                        # (n,K)
+        A = self.cov_inv_ @ self.means_.T   # (d,K)
+        first = X @ A   # (n,K)
         second = 0.5 * np.sum(self.means_ @ self.cov_inv_ * self.means_, axis=1)  # (K,)
         return first - second + np.log(self.priors_)
 
@@ -89,31 +89,30 @@ class SoftmaxRegression:
         self.classes_ = np.unique(y)
         K = len(self.classes_)
         y_map = {c:i for i,c in enumerate(self.classes_)}
-        t = np.array([y_map[yy] for yy in y])                # 0..K-1
-        Y = np.eye(K)[t]                                     # one-hot (n,K)
+        t = np.array([y_map[yy] for yy in y])   # 0..K-1
+        Y = np.eye(K)[t]    # one-hot (n,K)
 
         self.W = np.zeros((d, K), float)
         self.b = np.zeros(K, float)
 
         prev_loss = np.inf
         for it in range(1, self.epochs+1):
-            P = self.predict_proba(X)                        # (n,K)
+            P = self.predict_proba(X)   # (n,K)
             # cross-entropy + L2
             eps = 1e-12
             loss = -np.sum(Y * np.log(P + eps)) / n + 0.5*self.lam*np.sum(self.W*self.W)
             # gradientes
-            E = (P - Y) / n                                  # (n,K)
-            gW = X.T @ E + self.lam * self.W                 # (d,K)
-            gb = E.sum(axis=0) if self.bias else 0.0         # (K,)
+            E = (P - Y) / n # (n,K)
+            gW = X.T @ E + self.lam * self.W    # (d,K)
+            gb = E.sum(axis=0) if self.bias else 0.0    # (K,)
 
-            # paso
             self.W -= self.lr * gW
             if self.bias:
                 self.b -= self.lr * gb
 
             if abs(prev_loss - loss) < self.tol:
                 if self.verbose:
-                    print(f"converged @ {it}, loss={loss:.6f}")
+                    print(f"converged @ {it}, loss = {loss:.6f}")
                 break
             prev_loss = loss
         return self
@@ -139,7 +138,7 @@ class DecisionTreeEntropy:
     def __init__(self, max_depth=None, min_samples_split=2, max_features=None, random_state=42):
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
-        self.max_features = max_features  # None|'sqrt'|int
+        self.max_features = max_features  # None|sqrt|int
         self.rng = np.random.default_rng(random_state)
         self.root = None
         self.classes_ = None
@@ -188,9 +187,7 @@ class DecisionTreeEntropy:
         node.proba = (counts + 1e-12) / (counts.sum() + 1e-12)  # suavizado
         node.is_leaf = True
 
-        if (self.max_depth is not None and depth >= self.max_depth) or \
-           len(np.unique(y)) == 1 or \
-           X.shape[0] < self.min_samples_split:
+        if (self.max_depth is not None and depth >= self.max_depth) or len(np.unique(y)) == 1 or X.shape[0] < self.min_samples_split:
             return node
 
         # elegir subconjunto de features
@@ -222,6 +219,7 @@ class DecisionTreeEntropy:
         mask = X[:, best_feat] <= best_thr
         node.left  = self._grow(X[mask],  y[mask],  depth+1)
         node.right = self._grow(X[~mask], y[~mask], depth+1)
+
         return node
 
     def fit(self, X, y):
@@ -253,8 +251,7 @@ class DecisionTreeEntropy:
 
 
 class RandomForest:
-    def __init__(self, n_estimators=50, max_depth=None, min_samples_split=2,
-                 max_features='sqrt', bootstrap=True, random_state=42):
+    def __init__(self, n_estimators=50, max_depth=None, min_samples_split=2, max_features='sqrt', bootstrap=True, random_state=42):
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
@@ -275,12 +272,10 @@ class RandomForest:
                 Xi, yi = X[idx], y[idx]
             else:
                 Xi, yi = X, y
-            t = DecisionTreeEntropy(max_depth=self.max_depth,
-                                    min_samples_split=self.min_samples_split,
-                                    max_features=self.max_features,
-                                    random_state=int(self.rng.integers(0, 1e9)))
+            t = DecisionTreeEntropy(max_depth=self.max_depth, min_samples_split=self.min_samples_split, max_features=self.max_features, random_state=int(self.rng.integers(0, 1e9)))
             t.fit(Xi, yi)
             self.trees.append(t)
+
         return self
 
     def predict_proba(self, X):
@@ -310,7 +305,7 @@ class LogisticRegressionL2:
         return 1.0 / (1.0 + np.exp(-z))
 
     def predict_proba(self, X):
-        # <-- CAST EXPLÍCITO A FLOAT PARA EVITAR dtype=object
+        # CAST EXPLÍCITO A FLOAT PARA EVITAR dtype=object
         X = np.asarray(X, dtype=float)
         z = X @ self.w + (self.b if self.bias else 0.0)
         return self._sigmoid(z)
@@ -337,7 +332,7 @@ class LogisticRegressionL2:
             sw_sum = float(n)
 
         prev_loss = np.inf
-        lr = float(self.lr)  # copia local (podemos backoff)
+        lr = float(self.lr)  # copia local
 
         for it in range(1, self.epochs + 1):
             # forward
@@ -351,7 +346,6 @@ class LogisticRegressionL2:
             backoff = 0
             while not np.isfinite(loss) and backoff < max_backoff:
                 lr *= 0.5
-                # achicamos un poco los parámetros para volver a región estable
                 self.w *= 0.5
                 self.b *= 0.5
                 z = X @ self.w + (self.b if self.bias else 0.0)
@@ -360,32 +354,28 @@ class LogisticRegressionL2:
                 loss = float(logloss + reg)
                 backoff += 1
             if not np.isfinite(loss):
-                # último recurso: reiniciar esta iter y seguir
                 self.w[:] = 0.0
                 self.b = 0.0
                 lr = max(lr * 0.5, 1e-6)
 
-            # probas seguras
             p = 1.0 / (1.0 + np.exp(-np.clip(z, -35.0, 35.0)))
             err = p - y
 
-            # gradientes + L2 en w (no en bias)
             gw = (X.T @ (sw * err)) / sw_sum + self.lam * self.w
             gb = (sw * err).sum() / sw_sum if self.bias else 0.0
 
-            # clipping de gradiente
             gnorm = float(np.linalg.norm(gw))
+
             if gnorm > max_grad_norm:
                 gw *= (max_grad_norm / (gnorm + 1e-12))
+
             if self.bias:
                 gb = float(np.clip(gb, -max_grad_norm, max_grad_norm))
 
-            # paso
             self.w -= lr * gw
             if self.bias:
                 self.b -= lr * gb
 
-            # saneo por si acaso (evita NaN/Inf propagados)
             self.w = np.nan_to_num(self.w, nan=0.0, posinf=1e6, neginf=-1e6)
             if self.bias:
                 self.b = float(np.nan_to_num(self.b, nan=0.0, posinf=1e6, neginf=-1e6))
